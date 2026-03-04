@@ -247,16 +247,29 @@ export class SaplingRuntime implements AgentRuntime {
 	 * @returns Argv array for Bun.spawn — do not shell-interpolate
 	 */
 	buildDirectSpawn(opts: DirectSpawnOpts): string[] {
+		// Resolve the actual model name: if this is an alias (e.g. "sonnet") routed
+		// through a gateway, the real model ID is in the env vars. Sapling passes
+		// --model directly to the SDK, so it needs the actual model ID, not the alias.
+		let model = opts.model;
+		if (opts.env) {
+			const aliasKey = `ANTHROPIC_DEFAULT_${model.toUpperCase()}_MODEL`;
+			const resolved = opts.env[aliasKey];
+			if (resolved) {
+				model = resolved;
+			}
+		}
+
 		return [
 			"sp",
 			"run",
 			"--model",
-			opts.model,
+			model,
 			"--json",
 			"--cwd",
 			opts.cwd,
 			"--system-prompt-file",
 			opts.instructionPath,
+			"Read SAPLING.md for your task assignment and begin immediately.",
 		];
 	}
 
@@ -437,16 +450,43 @@ export class SaplingRuntime implements AgentRuntime {
 	}
 
 	/**
-	 * Build runtime-specific environment variables for model/provider routing.
+	 * Build runtime-specific environment variables for spawning sapling.
 	 *
-	 * Returns the provider environment variables from the resolved model.
-	 * For Sapling native: may include SAPLING_API_KEY or provider-specific vars.
-	 * For gateway providers: may include gateway-specific auth and routing vars.
+	 * Translates overstory's gateway provider env vars into what sapling expects.
+	 * Worktrees don't have .env files (gitignored), so overstory must pass
+	 * provider credentials — same as it does for every other runtime.
+	 *
+	 * Key translations:
+	 * - ANTHROPIC_AUTH_TOKEN → ANTHROPIC_API_KEY (sapling SDK reads API_KEY)
+	 * - ANTHROPIC_BASE_URL passed through as-is
+	 * - SAPLING_BACKEND=sdk forced when gateway provider is configured
 	 *
 	 * @param model - Resolved model with optional provider env vars
-	 * @returns Environment variable map (may be empty)
+	 * @returns Environment variable map for sapling subprocess
 	 */
 	buildEnv(model: ResolvedModel): Record<string, string> {
-		return model.env ?? {};
+		const env: Record<string, string> = {
+			// Clear Claude Code session markers so sapling doesn't auto-detect
+			// SDK backend when spawned from a Claude Code session (CLAUDECODE=1).
+			CLAUDECODE: "",
+			CLAUDE_CODE_SSE_PORT: "",
+			CLAUDE_CODE_ENTRYPOINT: "",
+		};
+
+		const providerEnv = model.env ?? {};
+
+		// Gateway providers use ANTHROPIC_AUTH_TOKEN; sapling's SDK reads ANTHROPIC_API_KEY.
+		if (providerEnv.ANTHROPIC_AUTH_TOKEN) {
+			env.ANTHROPIC_API_KEY = providerEnv.ANTHROPIC_AUTH_TOKEN;
+		}
+		if (providerEnv.ANTHROPIC_BASE_URL) {
+			env.ANTHROPIC_BASE_URL = providerEnv.ANTHROPIC_BASE_URL;
+		}
+		// Force SDK backend when a gateway provider is configured.
+		if (providerEnv.ANTHROPIC_AUTH_TOKEN || providerEnv.ANTHROPIC_BASE_URL) {
+			env.SAPLING_BACKEND = "sdk";
+		}
+
+		return env;
 	}
 }
