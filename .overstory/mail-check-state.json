@@ -1,7 +1,8 @@
 {
 	"exit-config-builder": 1772758352140,
-	"coordinator": 1772758766342,
-	"coordinator-exit-lead": 1772758767668,
+	"coordinator": 1772758908408,
+	"coordinator-exit-lead": 1772758910587,
 	"check-complete-builder": 1772758755309,
-	"completion-proto-builder": 1772758733281
+	"completion-proto-builder": 1772758733281,
+	"session-end-builder": 1772758907839
 }
