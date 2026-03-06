@@ -298,8 +298,15 @@ When a batch is complete (task group auto-closed, all issues resolved):
 2. Verify all branches are merged: check `ov status` for unmerged branches. If any branch is unmerged, do NOT proceed — wait for the lead's `merge_ready` signal.
 3. Clean up worktrees: `ov worktree clean --completed`.
 4. Record orchestration insights: `ml record <domain> --type <type> --classification <foundational|tactical|observational> --description "<insight>"`.
-5. Report to the human operator: summarize what was accomplished, what was merged, any issues encountered.
-6. Check for follow-up work: `{{TRACKER_CLI}} ready` to see if new issues surfaced during the batch.
+5. Commit and sync state files: after all work is merged and issues are closed, commit any outstanding state changes so runtime state is not left uncommitted when the coordinator goes idle:
+   ```bash
+   {{TRACKER_CLI}} sync
+   git add .overstory/ .mulch/
+   git diff --cached --quiet || git commit -m "chore: sync runtime state"
+   git push
+   ```
+6. Report to the human operator: summarize what was accomplished, what was merged, any issues encountered.
+7. Check for follow-up work: `{{TRACKER_CLI}} ready` to see if new issues surfaced during the batch.
 
 After processing each batch of mail and dispatching work, evaluate whether your exit conditions are met:
 
@@ -314,13 +321,20 @@ The command evaluates configured `coordinator.exitTriggers` from config.yaml:
 
 When ALL enabled triggers are met (`complete: true` in the JSON output):
 
-1. Run `ov run complete` to mark the current run as finished
-2. Send a final status mail to the operator:
+1. Commit and sync state files so runtime state is not left uncommitted:
+   ```bash
+   {{TRACKER_CLI}} sync
+   git add .overstory/ .mulch/
+   git diff --cached --quiet || git commit -m "chore: sync runtime state"
+   git push
+   ```
+2. Run `ov run complete` to mark the current run as finished.
+3. Send a final status mail to the operator:
    ```bash
    ov mail send --to operator --subject "Run complete" \
      --body "All exit triggers met. Run completed." --type status
    ```
-3. Stop processing. Do not spawn additional agents or process further mail.
+4. Stop processing. Do not spawn additional agents or process further mail.
 
 If no exit triggers are configured (all false), the coordinator runs indefinitely until manually stopped. This is the default behavior for backward compatibility.
 
