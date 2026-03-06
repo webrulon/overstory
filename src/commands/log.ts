@@ -101,7 +101,24 @@ function transitionToCompleted(projectRoot: string, agentName: string): void {
 		try {
 			const session = store.getByName(agentName);
 			if (session && PERSISTENT_CAPABILITIES.has(session.capability)) {
-				// Persistent agents: only update activity, don't mark completed
+				// Check if coordinator self-exited by verifying the run is already completed.
+				// If `ov run complete` was called before session-end, the run status is 'completed'
+				// and we should transition the coordinator session to completed too.
+				if (session.capability === "coordinator" && session.runId) {
+					const runStore = createRunStore(join(overstoryDir, "sessions.db"));
+					try {
+						const run = runStore.getRun(session.runId);
+						if (run && run.status === "completed") {
+							// Self-exit: coordinator called ov run complete before session ended
+							store.updateState(agentName, "completed");
+							store.updateLastActivity(agentName);
+							return;
+						}
+					} finally {
+						runStore.close();
+					}
+				}
+				// Normal persistent agent: only update activity, don't mark completed
 				store.updateLastActivity(agentName);
 				return;
 			}
@@ -664,7 +681,12 @@ async function runLog(opts: {
 										join(config.project.root, ".overstory", "sessions.db"),
 									);
 									try {
-										runStore.completeRun(runId, "completed");
+										// Only complete the run if it's still active.
+										// Self-exiting coordinators will have already called ov run complete.
+										const run = runStore.getRun(runId);
+										if (run && run.status === "active") {
+											runStore.completeRun(runId, "completed");
+										}
 									} finally {
 										runStore.close();
 									}
