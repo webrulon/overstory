@@ -224,7 +224,8 @@ export type MailProtocolType =
 	| "escalation"
 	| "health_check"
 	| "dispatch"
-	| "assign";
+	| "assign"
+	| "decision_gate";
 
 /** All valid mail message types. */
 export type MailMessageType = MailSemanticType | MailProtocolType;
@@ -243,6 +244,7 @@ export const MAIL_MESSAGE_TYPES: readonly MailMessageType[] = [
 	"health_check",
 	"dispatch",
 	"assign",
+	"decision_gate",
 ] as const;
 
 export interface MailMessage {
@@ -327,6 +329,16 @@ export interface AssignPayload {
 	branch: string;
 }
 
+/** Agent pauses for a human-in-the-loop decision before proceeding. */
+export interface DecisionGatePayload {
+	/** Options for the human decision-maker to choose from. */
+	options: string[];
+	/** Context explaining why the decision is needed. */
+	context: string;
+	/** Optional deadline for the decision (ISO timestamp). */
+	deadline?: string;
+}
+
 /** Maps protocol message types to their payload interfaces. */
 export interface MailPayloadMap {
 	worker_done: WorkerDonePayload;
@@ -337,6 +349,7 @@ export interface MailPayloadMap {
 	health_check: HealthCheckPayload;
 	dispatch: DispatchPayload;
 	assign: AssignPayload;
+	decision_gate: DecisionGatePayload;
 }
 
 // === Overlay ===
